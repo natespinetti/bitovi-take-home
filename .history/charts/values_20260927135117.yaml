@@ -1,0 +1,27 @@
+image:
+  repository: order-processor
+  tag: dev
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# Downstream Postgres the worker writes to.
+db:
+  host: orders-db.internal
+  existingSecret: order-processor-db
+  passwordKey: password
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+terminationGracePeriodSeconds: 30

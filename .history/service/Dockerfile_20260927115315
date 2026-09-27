@@ -1,0 +1,12 @@
+FROM golang:1.22 AS builder
+
+WORKDIR /app
+COPY . .
+RUN go build -o /order-processor .
+
+
+FROM alpine:latest
+COPY --from=builder /order-processor /order-processor
+USER nonroot:nonroot
+EXPOSE 8080
+CMD ["/order-processor"]
