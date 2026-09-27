@@ -16,15 +16,18 @@ RUN CGO_ENABLED=0 GOOS=linux \
 
 FROM alpine:3.22
 
-RUN addgroup -S appgroup \
-    && adduser -S appuser -G appgroup
+RUN addgroup -S -g 10001 appgroup \
+    && adduser -S -D -H \
+      -u 10001 \
+      -G appgroup \
+      appuser
 
 COPY --from=builder \
     --chown=appuser:appgroup \
     /order-processor \
     /order-processor
 
-USER appuser:appgroup
+USER 10001:10001
 
 EXPOSE 8080
 

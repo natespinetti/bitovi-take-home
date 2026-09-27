@@ -9,7 +9,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/your-user/your-repository.git
+    repoURL: https://github.com/natespinetti/bitovi-take-home.git
     targetRevision: main
     path: charts
 
