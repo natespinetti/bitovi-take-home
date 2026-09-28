@@ -58,3 +58,12 @@ Application repository owns:
 - ExternalSecret
 - Deployment
 - Service
+
+The production ClusterSecretStore intentionally contains no static AWS
+credentials. External Secrets Operator is expected to receive a
+least-privilege IAM role through EKS workload identity.
+
+Static credentials were used only for local kind verification and were
+not committed. A local cluster without AWS workload identity will need
+its own out-of-band credentials or a dummy pre-existing Kubernetes
+Secret.
