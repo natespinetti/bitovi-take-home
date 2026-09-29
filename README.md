@@ -1,3 +1,5 @@
+View [NOTES.md](https://github.com/natespinetti/bitovi-take-home/blob/main/NOTES.md) for deployment steps
+
 # Bitovi Platform Take-Home: Harden a Service for Production
 
 **Time budget: 2–3 hours. Please don't exceed it.** We'd rather see a smaller
