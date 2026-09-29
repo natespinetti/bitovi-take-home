@@ -1,40 +1,229 @@
-# Build and test
+# Order Processor
 
-docker build -t order-processor:dev ./service
-docker run --rm -p 8080:8080 order-processor:dev
+Production-ready container and Kubernetes deployment for the provided Go worker service.
 
-# Validate chart
+## Prerequisites
 
+Install and start:
+
+- Docker Desktop
+- Git
+- `kubectl`
+- Helm
+- kind
+
+On macOS:
+
+```bash
+brew install git kubectl helm kind
+```
+
+## 1. Clone the repository
+
+```bash
+git clone https://github.com/natespinetti/bitovi-take-home.git
+cd bitovi-take-home
+```
+
+## 2. Build and test the container
+
+```bash
+docker build \
+  --tag order-processor:dev \
+  ./service
+
+docker run \
+  --rm \
+  --publish 8080:8080 \
+  order-processor:dev
+```
+
+Test it from another terminal:
+
+```bash
+curl http://localhost:8080/healthz
+curl http://localhost:8080/readyz
+curl http://localhost:8080/metrics
+```
+
+`/readyz` may return an error during the first five seconds.
+
+## 3. Validate the Helm chart
+
+```bash
 helm lint ./charts
-helm template production ./charts --namespace order-processor
 
-# Create local cluster and load image
+helm template production ./charts \
+  --namespace order-processor
+```
 
-kind create cluster --name bitovi
-kind load docker-image order-processor:dev --name bitovi
+## 4. Create the Kubernetes cluster
 
-# Install platform prerequisites
+```bash
+kind create cluster \
+  --name bitovi
 
-helm upgrade --install argocd argo/argo-cd \
- -n argocd --create-namespace --wait
+kind load docker-image \
+  order-processor:dev \
+  --name bitovi
+```
 
+## 5. Add the Helm repositories
+
+```bash
+helm repo add argo \
+  https://argoproj.github.io/argo-helm
+
+helm repo add external-secrets \
+  https://charts.external-secrets.io
+
+helm repo add prometheus-community \
+  https://prometheus-community.github.io/helm-charts
+
+helm repo update
+```
+
+## 6. Install the platform components
+
+### Argo CD
+
+```bash
+helm upgrade --install argocd \
+  argo/argo-cd \
+  --namespace argocd \
+  --create-namespace \
+  --wait
+```
+
+### External Secrets Operator
+
+```bash
 helm upgrade --install external-secrets \
- external-secrets/external-secrets \
- -n external-secrets --create-namespace \
- --set installCRDs=true --wait
+  external-secrets/external-secrets \
+  --namespace external-secrets \
+  --create-namespace \
+  --set installCRDs=true \
+  --wait
+```
 
+### Prometheus Operator
+
+```bash
 helm upgrade --install monitoring \
- prometheus-community/kube-prometheus-stack \
- -n monitoring --create-namespace --wait \
- --timeout 10m
+  prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace \
+  --wait \
+  --timeout 10m
+```
 
-# Bootstrap GitOps
+## 7. Configure the database secret
 
-kubectl apply -f argocd/application.yaml
+The chart expects AWS Secrets Manager to contain:
 
-# Verify
+```text
+Region:        us-east-2
+Secret name:   Bitovi-Order-Processor-PW
+JSON property: order-processor-db
+```
 
-kubectl get application order-processor -n argocd
-kubectl get pods -n order-processor
-kubectl get externalsecret -n order-processor
-kubectl get servicemonitor -n order-processor
+Example value:
+
+```json
+{
+  "order-processor-db": "example-password"
+}
+```
+
+AWS credentials are intentionally not included in this repository. The cluster must provide AWS access to External Secrets Operator using workload identity, such as EKS Pod Identity or IRSA.
+
+For local testing, an authorized AWS identity must be configured separately.
+
+## 8. Deploy with Argo CD
+
+```bash
+kubectl apply \
+  --filename argocd/application.yaml
+```
+
+Argo CD then deploys and manages the application from Git. Do not manually apply the manifests inside `charts/`.
+
+## 9. Verify the deployment
+
+```bash
+kubectl get application order-processor \
+  --namespace argocd
+
+kubectl get pods \
+  --namespace order-processor
+
+kubectl get externalsecret \
+  --namespace order-processor
+
+kubectl get servicemonitor \
+  --namespace order-processor
+```
+
+Expected status:
+
+```text
+Argo CD:          Synced / Healthy
+Application pod:  1/1 Running
+ExternalSecret:   SecretSynced / Ready
+```
+
+## 10. Test the deployed service
+
+```bash
+kubectl port-forward \
+  service/production-order-processor \
+  18080:80 \
+  --namespace order-processor
+```
+
+Test from another terminal:
+
+```bash
+curl http://localhost:18080/healthz
+curl http://localhost:18080/readyz
+curl http://localhost:18080/metrics
+```
+
+## 11. Verify Prometheus
+
+```bash
+kubectl port-forward \
+  service/monitoring-kube-prometheus-prometheus \
+  9090:9090 \
+  --namespace monitoring
+```
+
+Open:
+
+```text
+http://localhost:9090
+```
+
+Query:
+
+```promql
+up{namespace="order-processor"}
+```
+
+A value of `1` confirms that Prometheus is scraping the service.
+
+## Cleanup
+
+```bash
+kind delete cluster \
+  --name bitovi
+```
+
+## Notes
+
+- Application resources are managed by Argo CD.
+- Secrets are loaded through External Secrets Operator.
+- AWS credentials are never stored in Git.
+- The submitted `ClusterSecretStore` expects workload identity.
+- The local image uses `IfNotPresent` because it is loaded directly into kind.
+- See `DESIGN.md` for production tradeoffs and proposed future improvements.
