@@ -16,6 +16,9 @@ db:
   existingSecret: order-processor-db
   passwordKey: password
 
+externalSecrets:
+  enabled: false
+
 resources:
   requests:
     cpu: 50m

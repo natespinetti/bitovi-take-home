@@ -74,9 +74,6 @@ kind load docker-image \
 helm repo add argo \
   https://argoproj.github.io/argo-helm
 
-helm repo add external-secrets \
-  https://charts.external-secrets.io
-
 helm repo add prometheus-community \
   https://prometheus-community.github.io/helm-charts
 
@@ -95,9 +92,17 @@ helm upgrade --install argocd \
   --wait
 ```
 
-### External Secrets Operator
+### External Secrets Operator (optional AWS integration)
+
+Skip this component for local review. Install it only when enabling
+`externalSecrets.enabled`.
 
 ```bash
+helm repo add external-secrets \
+  https://charts.external-secrets.io
+
+helm repo update
+
 helm upgrade --install external-secrets \
   external-secrets/external-secrets \
   --namespace external-secrets \
@@ -119,7 +124,26 @@ helm upgrade --install monitoring \
 
 ## 7. Configure the database secret
 
-The chart expects AWS Secrets Manager to contain:
+The chart defaults to `externalSecrets.enabled: false`, so local review requires
+no AWS credentials or External Secrets Operator. Create the Kubernetes secret
+referenced by `db.existingSecret` before deploying:
+
+```bash
+kubectl create namespace order-processor
+
+kubectl create secret generic order-processor-db \
+  --namespace order-processor \
+  --from-literal=password=local-review-only
+```
+
+This placeholder is only for the supplied worker, which simulates processing
+and does not connect to Postgres. Real database credentials should be provisioned
+separately and kept out of Git.
+
+For AWS integration, set `externalSecrets.enabled: true` in the values used by
+Argo CD (or pass `--set externalSecrets.enabled=true` when deploying with Helm),
+install the optional operator above, and omit the local secret creation. The
+chart then expects AWS Secrets Manager to contain:
 
 ```text
 Region:        us-east-2
@@ -136,8 +160,6 @@ Example value:
 ```
 
 AWS credentials are intentionally not included in this repository. The cluster must provide AWS access to External Secrets Operator using workload identity, such as EKS Pod Identity or IRSA.
-
-For local testing, an authorized AWS identity must be configured separately.
 
 ## 8. Deploy with Argo CD
 
@@ -157,9 +179,6 @@ kubectl get application order-processor \
 kubectl get pods \
   --namespace order-processor
 
-kubectl get externalsecret \
-  --namespace order-processor
-
 kubectl get servicemonitor \
   --namespace order-processor
 ```
@@ -169,8 +188,10 @@ Expected status:
 ```text
 Argo CD:          Synced / Healthy
 Application pod:  1/1 Running
-ExternalSecret:   SecretSynced / Ready
 ```
+
+When AWS integration is enabled, also check `kubectl get externalsecret
+--namespace order-processor` for `SecretSynced` / `Ready`.
 
 ## 10. Test the deployed service
 
@@ -222,7 +243,8 @@ kind delete cluster \
 ## Notes
 
 - Application resources are managed by Argo CD.
-- Secrets are loaded through External Secrets Operator.
+- Local review uses a manually created placeholder Kubernetes secret; AWS
+  deployments load secrets through External Secrets Operator.
 - AWS credentials are never stored in Git.
 - The submitted `ClusterSecretStore` expects workload identity.
 - The local image uses `IfNotPresent` because it is loaded directly into kind.
