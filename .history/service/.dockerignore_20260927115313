@@ -1,9 +1,0 @@
-.git
-.github
-.idea
-.vscode
-*.md
-coverage*
-tmp/
-dist/
-.env*
